@@ -7,7 +7,7 @@ app.use(express.json());
 
 const HF_API_KEY = process.env.HF_API_KEY;          // Hugging Face API key
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN; // Slack Bot User OAuth Token
-const HF_MODEL = "Syntheresis/auto-edit-hy-500m";   // Your Armenian AI model
+const HF_MODEL = "google/flan-t5-small";           // Free hosted model
 
 // Root route (optional)
 app.get('/', (req, res) => res.send('ok'));
@@ -43,21 +43,27 @@ app.post('/incoming', async (req, res) => {
         Authorization: `Bearer ${HF_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 256 } })
+      body: JSON.stringify({ inputs: prompt })
     });
 
     if (!hfResp.ok) {
       console.error(await hfResp.text());
-      await postSlackDM(userId, 'Ներողություն — խնդիրը AI-ի հետ էր, փորձեք ավելի ուշ։');
+      await postSlackDM(userId, 'Ներողություն — AI-ն հիմա հասանելի չէ, փորձեք ավելի ուշ։');
       return res.status(200).send('hf error');
     }
 
     const hfJson = await hfResp.json();
     let replyText = '';
-    if (typeof hfJson === 'string') replyText = hfJson;
-    else if (hfJson.generated_text) replyText = hfJson.generated_text;
-    else if (Array.isArray(hfJson) && hfJson[0] && hfJson[0].generated_text) replyText = hfJson[0].generated_text;
-    else replyText = JSON.stringify(hfJson).slice(0, 2000);
+
+    if (Array.isArray(hfJson) && hfJson[0] && hfJson[0].generated_text) {
+      replyText = hfJson[0].generated_text;
+    } else if (hfJson.generated_text) {
+      replyText = hfJson.generated_text;
+    } else if (typeof hfJson === 'string') {
+      replyText = hfJson;
+    } else {
+      replyText = JSON.stringify(hfJson).slice(0, 2000);
+    }
 
     // Send reply back to Slack
     await postSlackDM(userId, replyText.slice(0, 3000));
